@@ -1,0 +1,13 @@
+[Unit]
+Description=Persist the battery charging threshold
+After={{ events|join(" ") }}
+StartLimitBurst=0
+
+[Service]
+Type=oneshot
+ExecStart=echo {{ battery_threshold }} > {{ battery_threshold_path }}
+Restart=on-failure
+RemainAfterExit=true
+
+[Install]
+WantedBy={{ events|join(" ") }}

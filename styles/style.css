@@ -1,0 +1,12 @@
+.battery-low {
+    background-color: green;
+}
+
+.battery-medium {
+    background-color: orange;
+}
+
+
+.battery-full {
+    background-color: orangered;
+}
