@@ -5,7 +5,7 @@ StartLimitBurst=0
 
 [Service]
 Type=oneshot
-ExecStart=echo {{ battery_threshold }} > {{ battery_threshold_path }}
+ExecStart=/bin/sh -c "/usr/bin/echo {{ battery_threshold }} > {{ battery_threshold_path }}"
 Restart=on-failure
 RemainAfterExit=true
 
