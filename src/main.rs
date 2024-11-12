@@ -1,12 +1,13 @@
-use battery_limiter::battery_level::BatteryLevel;
-use battery_limiter::service::BatteryLimiterService;
+use async_process::Command;
+use battery_limiter::{
+    args::BatteryLimiterArgs, battery_level::BatteryLevel, service::BatteryLimiterService,
+};
 use gtk::gio::*;
 use gtk::prelude::*;
 use gtk::{gdk, glib};
 use libadwaita as adw;
-use libadwaita::prelude::AdwApplicationWindowExt;
-use std::io;
-use std::sync::Arc;
+use libadwaita::prelude::AdwApplicationWindowExt as _;
+use std::{io, sync::Arc};
 
 const MENU_ICON_NAME: &str = "open-menu-symbolic";
 
@@ -17,7 +18,43 @@ pub struct AppContext {
 unsafe impl Send for AppContext {}
 unsafe impl Sync for AppContext {}
 
+fn format_cli_args(percentage: u8) -> Vec<String> {
+    vec![
+        std::env::current_exe()
+            .expect("can't get current exe path")
+            .into_os_string()
+            .into_string()
+            .expect("can't parse current exe path"),
+        "--persist".to_string(),
+        "--percentage".to_string(),
+        percentage.to_string(),
+    ]
+}
+
 fn main() -> glib::ExitCode {
+    if std::env::args_os().len() > 1 {
+        let args: BatteryLimiterArgs = argh::from_env();
+        let bat_lvl: BatteryLevel = args.percentage.into();
+        let out = futures_lite::future::block_on(async {
+            let res = match bat_lvl.apply().await {
+                Ok(percentage) => {
+                    let service = BatteryLimiterService::new(percentage);
+                    service.persist().await
+                }
+                Err(e) => Err(e),
+            };
+            match res {
+                Ok(_) => "modification applied",
+                Err(err) => match err.kind() {
+                    io::ErrorKind::PermissionDenied => "permission denied",
+                    io::ErrorKind::NotFound => "file not found",
+                    _ => "modification failed",
+                },
+            }
+        });
+        print!("{out}");
+        return glib::ExitCode::SUCCESS;
+    }
     let application = adw::Application::builder()
         .application_id("com.github.battery_limiter")
         .build();
@@ -105,27 +142,19 @@ where
         let button = button.to_owned();
         glib::spawn_future_local(async move {
             button.set_sensitive(false);
-            let res = match bat_lvl.apply().await {
-                Ok(percentage) => {
-                    let service = BatteryLimiterService::new(percentage);
-                    service.persist().await
-                }
-                Err(e) => Err(e),
-            };
-            let msg = match res {
-                Ok(_) => {
-                    callback();
-                    "modification applied"
-                }
-                Err(err) => match err.kind() {
-                    io::ErrorKind::PermissionDenied => "permission denied",
-                    io::ErrorKind::NotFound => "file not found",
-                    _ => "modification failed",
-                },
-            };
+            let msg: String = Command::new("pkexec")
+                .args(format_cli_args(bat_lvl.get_percentage()))
+                .output()
+                .await
+                .map(|output| {
+                    String::from_utf8(output.stdout).unwrap_or("parsing error".to_string())
+                })
+                .unwrap_or("modification failed".into());
+
+            callback();
             button.set_sensitive(true);
             ctx.toast_overlay
-                .add_toast(adw::Toast::builder().timeout(2).title(msg).build());
+                .add_toast(adw::Toast::builder().timeout(2).title(msg.trim()).build());
         });
     });
     container.append(&label);

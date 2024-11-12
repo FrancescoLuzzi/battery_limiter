@@ -20,6 +20,7 @@ impl BatteryLimiterService<'_> {
             ..Default::default()
         }
     }
+
     pub async fn persist(&self) -> std::io::Result<ExitStatus> {
         save_service(self, SERVICE_FILE).await?;
         //TODO: handle the status results
