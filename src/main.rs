@@ -147,11 +147,15 @@ where
                 .output()
                 .await
                 .map(|output| {
-                    String::from_utf8(output.stdout).unwrap_or("parsing error".to_string())
+                    if output.status.success() {
+                        callback();
+                        String::from_utf8(output.stdout).unwrap_or("parsing error".to_string())
+                    } else {
+                        "modification failed".into()
+                    }
                 })
                 .unwrap_or("modification failed".into());
 
-            callback();
             button.set_sensitive(true);
             ctx.toast_overlay
                 .add_toast(adw::Toast::builder().timeout(2).title(msg.trim()).build());
