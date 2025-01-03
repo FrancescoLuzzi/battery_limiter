@@ -7,24 +7,26 @@ use gtk::prelude::*;
 use gtk::{gdk, glib};
 use libadwaita as adw;
 use libadwaita::prelude::AdwApplicationWindowExt as _;
-use std::{io, sync::Arc};
+use std::sync::LazyLock;
+use std::{io, rc::Rc};
 
 const MENU_ICON_NAME: &str = "open-menu-symbolic";
+static EXE_PATH: LazyLock<String> = LazyLock::new(|| {
+    std::env::current_exe()
+        .expect("can't get current exe path")
+        .into_os_string()
+        .into_string()
+        .expect("can't parse current exe path")
+});
 
 pub struct AppContext {
     pub main_window: adw::ApplicationWindow,
     pub toast_overlay: adw::ToastOverlay,
 }
-unsafe impl Send for AppContext {}
-unsafe impl Sync for AppContext {}
 
 fn format_cli_args(percentage: u8) -> Vec<String> {
     vec![
-        std::env::current_exe()
-            .expect("can't get current exe path")
-            .into_os_string()
-            .into_string()
-            .expect("can't parse current exe path"),
+        EXE_PATH.to_string(),
         "--persist".to_string(),
         "--percentage".to_string(),
         percentage.to_string(),
@@ -76,7 +78,7 @@ fn load_css() {
     );
 }
 
-fn add_list_view<T: BoxExt>(ctx: Arc<AppContext>, window: &T) {
+fn add_list_view<T: BoxExt>(ctx: Rc<AppContext>, window: &T) {
     let list_box = gtk::ListBox::new();
     let curr_level = BatteryLevel::from_system()
         .expect("something went wrong getting current battery threshold");
@@ -115,7 +117,7 @@ fn add_list_view<T: BoxExt>(ctx: Arc<AppContext>, window: &T) {
     window.append(&scrolled_window);
 }
 
-fn create_battery_setter<F>(ctx: Arc<AppContext>, bat_lvl: BatteryLevel, callback: F) -> gtk::Box
+fn create_battery_setter<F>(ctx: Rc<AppContext>, bat_lvl: BatteryLevel, callback: F) -> gtk::Box
 where
     F: Fn() + Clone + Send + Sync + 'static,
 {
@@ -183,7 +185,7 @@ fn build_ui(application: &adw::Application) {
     toast_overlay.set_child(Some(&container));
     main_window.set_content(Some(&toast_overlay));
 
-    let ctx = Arc::new(AppContext {
+    let ctx = Rc::new(AppContext {
         main_window: main_window.clone(),
         toast_overlay,
     });
@@ -194,7 +196,7 @@ fn build_ui(application: &adw::Application) {
     main_window.present();
 }
 
-fn create_and_setup_menu(ctx: Arc<AppContext>) -> adw::HeaderBar {
+fn create_and_setup_menu(ctx: Rc<AppContext>) -> adw::HeaderBar {
     let header_bar = adw::HeaderBar::new();
     let menu = Menu::new();
     let action_about = ActionEntry::builder("about")
